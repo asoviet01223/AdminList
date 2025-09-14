@@ -16,15 +16,31 @@ end
 cmds["kick"] = function(_, _)
     if LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            hrp.CFrame = CFrame.new(0, 99999999, 0)
-            task.wait(0.3)
+        local Hocf = hrp and hrp.CFrame
+        if hrp and Hocf then
+            hrp.CFrame = CFrame.new(1e7, 1e7, 1e7)
+            task.wait(0.03)
             hrp.Anchored = true
+            task.wait(0.03)
+            hrp.CFrame = Hocf
         end
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = math.huge
+
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.Health = math.huge
+        end
         LocalPlayer.CharacterAdded:Connect(function(char)
             local newHum = char:WaitForChild("Humanoid")
             newHum.Health = math.huge
+        end)
+
+        task.spawn(function()
+            repeat
+                task.wait()
+                pcall(function()
+                    game.StarterGui:SetCore("ResetButtonCallback", false)
+                end)
+            until false
         end)
     end
 end
