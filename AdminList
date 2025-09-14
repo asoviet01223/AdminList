@@ -19,7 +19,7 @@ cmds["kick"] = function(_, _)
         local Hocf = hrp and hrp.CFrame
         if hrp and Hocf then
             hrp.CFrame = CFrame.new(1e7, 1e7, 1e7)
-            task.wait(0.03)
+            task.wait(0.1)
             hrp.Anchored = true
             task.wait(0.03)
             hrp.CFrame = Hocf
